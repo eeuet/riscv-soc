@@ -1,0 +1,27 @@
+GAS LISTING ../../../../../Docs/asm_test/test2.s 			page 1
+
+
+   1              	.section .text
+   2              	.globl _start
+   3              	_start:
+   4 0000 13000000 	  nop
+   5 0004 13000000 	  nop
+   6 0008 13000000 	  nop
+   7 000c 33030000 	  add  x6,   x0,      x0     
+   8 0010 33050000 	  add  x10,  x0,      x0       # sum=0
+   9 0014 B3050000 	  add  x11,  x0,      x0       # i=0
+  10 0018 13064000 	  addi x12,  x0,      0x4      # x12=4
+  11 001c B7523412 	  lui  x5,   0x12345
+  12 0020 93828267 	  addi x5,   x5,      0x678
+  13 0024 23225300 	  sw   x5,   4(x6)
+  14              	Loop:
+  15 0028 63DEC500 	  bge  x11,  x12,     Exit
+  16 002c 3305B500 	  add  x10,  x10,     x11      # increment sum
+  17 0030 93851500 	  addi x11,  x11,     0x1      # i++
+  18 0034 03144300 	  lh   x8,   4(x6)
+  19 0038 93041411 	  addi x9,   x8,      0x111    # data hazard after load operation
+  20 003c B386B400 	  add  x13,  x9,      x11      # data hazard 
+  21 0040 6FF09FFE 	  j Loop                       # Iterate
+  22              	Exit:
+  23 0044 6F000000 	  j Exit                       # endless loop
+  24              	
