@@ -13,6 +13,10 @@ package riscv_uet
 import chisel3._
 import chisel3.util.Valid
 
+class IrqIO extends Bundle {
+  val uartIrq  = Input(Bool())
+  // val timerIrq  = Input(Bool())
+}
 
 class DMemIO extends Bundle with Config {
   val addr        = Input(UInt(WLEN.W))
@@ -40,12 +44,9 @@ class DebugIO extends Bundle with Config {
   val pc        = Output(UInt(XLEN.W))
 }
 
-class IrqIO extends Bundle {
-  val uartIrq  = Input(Bool())
- // val timerIrq  = Input(Bool())
-}
 
 class CoreIO extends Bundle {
+// MT  val host  = new HostIO
   val debug = new DebugIO
   val irq   = new IrqIO
   val imemIO  = Flipped((new IMemIO))
@@ -57,6 +58,7 @@ class Core extends Module {
   val dpath = Module(new Datapath) 
   val ctrl  = Module(new Control)
 
+// MT  io.host <> dpath.io.host
   io.debug <> dpath.io.debug
   io.irq <> dpath.io.irq
   dpath.io.imem <> io.imemIO

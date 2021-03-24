@@ -2,75 +2,56 @@
 /*********************************************************************************
  *
  *
- * Apr 23, 2020        The implementation has disabled majority based sampling due
- *                     to lib implementation of majority issue.
+ * Mar 20, 2021        Simple Uart data reception with configurable baud-rate.
  */
 
 package uart
 
-import Chisel._
+import chisel3._
+import chisel3.util._
 
-// import freechips.rocketchip.util.Majority
+class UARTRx extends Module with UART_Config {
+  val io = IO(new Bundle {
+    val in = Input(Bool())
+    val out = Valid(Bits(dataBits.W))
+    val div = Input(UInt(divisorBits.W))
+  })
 
-class UARTRx(c: UARTParams) extends Module {
-  val io = new Bundle {
-    val en = Bool(INPUT)
-    val in = Bits(INPUT, 1)
-    val out = Valid(Bits(width = c.dataBits))
-    val div = UInt(INPUT, c.divisorBits)
-  }
+  // Bit counter for incoming bits
+  private val dataCountBits = log2Floor(dataBits) + 1
+  val data_count = Reg(UInt(dataCountBits.W))
+  val data_last = (data_count === (0.U))
 
-  val debounce = Reg(init = UInt(0, 2))
-  val debounce_max = (debounce === UInt(3))
-  val debounce_min = (debounce === UInt(0))
+  // Use baud divisor to divide the clock and generate pulses as bit sampling points
+  val prescaler = RegInit(0.U(divisorBits.W))
+  val pulse = (prescaler === (0.U))
+  val prescaler_next = Mux(pulse, (io.div - 1.U), prescaler - 1.U)
 
-  val prescaler = Reg(init = UInt(0x2, width = c.divisorBits - c.oversample + 1))
-  val start = Wire(init = Bool(false))
-  val pulse = (prescaler === UInt(0))
+  // Creating the mid point of the start bit and also achieving debouncing
+  val debounce = RegInit(0.U((divisorBits - 1).W))
+  val debounce_max = (debounce === (io.div/2.U))
 
-  private val dataCountBits = log2Floor(c.dataBits) + 1
+  // Shift register for collecting the incoming bits. Acts as a serial to parallel converter
+  val shifter = RegInit(0x0.U(dataBits.W))
 
-  val data_count = Reg(UInt(width = dataCountBits))
-  val data_last = (data_count === UInt(0))
-  val sample_count = Reg(UInt(width = c.oversample))
-  val sample_mid = (sample_count === UInt((c.oversampleFactor - c.nSamples + 1) >> 1))
-  val sample_last = (sample_count === UInt(0))
-  val countdown = Cat(data_count, sample_count) - UInt(1)
-
-  // Compensate for the divisor not being a multiple of the oversampling period.
-  // Let remainder k = (io.div % c.oversampleFactor).
-  // For the last k samples, extend the sampling delay by 1 cycle.
-  val remainder = io.div(c.oversample-1, 0)
-  val extend = (sample_count < remainder) // Pad head: (sample_count > ~remainder)
-  val restore = start || pulse
-  val prescaler_in = Mux(restore, io.div >> c.oversample, prescaler)
-  val prescaler_next = prescaler_in - Mux(restore && extend, UInt(0), UInt(1))
-
-  val sample = Reg(Bits(width = c.nSamples))
-  val voter = io.in // Majority(Seq(sample.toBool))
-  val shifter = Reg(init = Bits(0x00, width = c.dataBits))
-
-  val valid = Reg(init = Bool(false))
-  valid := Bool(false)
+  val valid = Reg(Bool())
+  valid := false.B
   io.out.valid := valid
   io.out.bits := shifter
 
-  val (s_idle :: s_data :: Nil) = Enum(UInt(), 2)
-  val state = Reg(init = s_idle)
+  // States for the state machine
+  val (s_idle :: s_data :: Nil) = Enum(2)
+  val state = RegInit(s_idle)
 
   switch (state) {
     is (s_idle) {
-      when (!(!io.in) && !debounce_min) {
-        debounce := debounce - UInt(1)
-      }
       when (!io.in) {
-        debounce := debounce + UInt(1)
+        // create midpoint for the start bit
+        debounce := debounce + (1.U)
         when (debounce_max) {
           state := s_data
-          start := Bool(true)
+          data_count := (dataBits).U
           prescaler := prescaler_next
-          data_count := UInt(c.dataBits)
-          sample_count := UInt(c.oversampleFactor - 1)
         }
       }
     }
@@ -78,29 +59,22 @@ class UARTRx(c: UARTParams) extends Module {
     is (s_data) {
       prescaler := prescaler_next
       when (pulse) {
-        sample := Cat(sample, io.in)
-        data_count := countdown >> c.oversample
-        sample_count := countdown(c.oversample-1, 0)
-
-        when (sample_mid) {
-          when (data_last) {
+        data_count := data_count - 1.U
+        // Check if it is the last data bit
+        when (data_last) {
             state := s_idle
-            valid := Bool(true)
-          } .otherwise {
+            valid := (true.B)
+            debounce := (0.U)
+        } .otherwise {
+           // sample the incoming bits
             shifter := Cat(io.in, shifter >> 1)
-          }
         }
       }
     }
   }
-
-  when (!io.en) {
-    debounce := UInt(0)
-  }
 }
 
-/*
+
 object URx_generate extends App {
-  val c = UARTParams()
-  Chisel.Driver.execute(args, () => new UARTRx(c))
-} */
+  Chisel.Driver.execute(args, () => new UARTRx)
+}

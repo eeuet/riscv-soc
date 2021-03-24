@@ -22,15 +22,25 @@ class TestUart(c: UART) extends PeekPokeTester(c) {
  // var data = 0x4A.U
  //  val enable = 1.U(1.W)
  // poke(c.io.in, data)
-  poke(c.io.en, 1.U)
+ // poke(c.io.en, 0.U)
  // peek(c.io.out)
-  step(1)
+  for (i <- 0 until 20) {
+    step(1)
+  }
+
+  //poke(c.io.en, 1.U)
 
   for (i <- 0 until 255) {
     step(1)
   }
+
+ // poke(c.io.en, 1.U)
+  for (i <- 0 until 255) {
+    step(1)
+  }
+
  // enable := 0.U
-  poke(c.io.en, 0.U)
+ // poke(c.io.en, 0.U)
   for (i <- 0 until 20) {
     step(1)
   }
@@ -41,9 +51,8 @@ object Uart_Main extends App {
   /* Driver.execute(args, () => new UARTTx) {
     (c) => new TestUart(c)
   } */
-  val ut = UARTParams()
   
-  iotesters.Driver.execute(Array("--generate-vcd-output", "on", "--backend-name", "firrtl"), () => new UART(ut)){
+  iotesters.Driver.execute(Array("--generate-vcd-output", "on", "--backend-name", "treadle"), () => new UART){
     c => new TestUart(c)
   } 
 }

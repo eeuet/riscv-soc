@@ -28,65 +28,19 @@ import ALUOP._
 
 class TestCore(c: ProcessorTile) // traceFile: String, genTrace: Boolean
       extends PeekPokeTester(c) {
-  //val endFlag = BigInt("deadc0de", 16)
 
-      step(1)
-      step(1)
-      step(1)
-      step(1)
+      var uart_TxRx = (peek(c.io.uartTx) == BigInt(1))
 
-      step(1)
-      println(f" pc: 0x${peek(c.io.debug.pc)}%x")
-      println(f" inst: 0x${peek(c.io.debug.inst)}%x")
-      expect(c.io.debug.regWaddr, 0x06)
-
-      step(1)
-      println(f" pc: 0x${peek(c.io.debug.pc)}%x")
-      println(f" inst: 0x${peek(c.io.debug.inst)}%x")
-      expect(c.io.debug.regWaddr, 0x0A) 
-
-      step(1)
-      println(f" pc: 0x${peek(c.io.debug.pc)}%x")
-      println(f" inst: 0x${peek(c.io.debug.inst)}%x")
-      expect(c.io.debug.regWaddr, 0x0B) 
-
-      step(1)
-      println(f" pc: 0x${peek(c.io.debug.pc)}%x")
-      println(f" inst: 0x${peek(c.io.debug.inst)}%x")
-      expect(c.io.debug.regWaddr, 0x0C) 
-
-      step(1)
-      println(f" pc: 0x${peek(c.io.debug.pc)}%x")
-      println(f" inst: 0x${peek(c.io.debug.inst)}%x")
-      expect(c.io.debug.regWaddr, 0x05) 
-
-      for (i <- 0 until 16) {
-        step(1)
-      }
-
-      var uart_Int = true.B
-   //   poke(c.io.irq.uartIrq, uart_Int)
-
-      for (i <- 0 until 10) {
-            step(1)
-      }
-   //   uart_Int = false.B
-   //   poke(c.io.irq.uartIrq, uart_Int)
-
-      for (i <- 0 until 8) {
+      for (i <- 0 until 4000) {
+            uart_TxRx = (peek(c.io.uartTx) == BigInt(1) )
+            if (uart_TxRx)
+                  poke(c.io.uartRx, true.B)
+            else
+                  poke(c.io.uartRx, false.B)
             step(1)
       }
 
-      uart_Int = true.B
-      poke(c.io.irq.uartIrq, uart_Int)
-      step(1)
-      step(1)
-      uart_Int = false.B
-      poke(c.io.irq.uartIrq, uart_Int)
 
-      for (i <- 0 until 200) {
-            step(1)
-      }
 
 }
 

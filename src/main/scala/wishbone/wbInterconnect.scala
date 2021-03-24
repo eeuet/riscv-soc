@@ -18,6 +18,7 @@ import chisel3.testers._
 import chisel3.core.SeqUtils
 import riscv_uet.{CONSTANTS, Config, DMemIO, IMemIO}
 import memories.{DataMem, InstMem}
+import uart.{UART, UartIO}
 
 object WB_Master {
   val BYTE_0                = 0.U
@@ -35,7 +36,6 @@ object WB_Master {
 }
 
 object WB_InterConnect {
-
   // Address mapping for Wishbone slaves
   val IMEM = 0x0.U(4.W)
   val DMEM = 0x1.U(4.W)
@@ -90,15 +90,19 @@ class WB_Master extends Module with Config{
 class WB_InterConnectIO extends Bundle {
   val dmemIO  = new DMemIO
   val imemIO  = new IMemIO
+  val uartTx = Output(Bool())
+  val uartRx = Input(Bool())
+  val uartInt  = Output(Bool())
 }
 
 class WB_InterConnect(initFile: String)  extends Module with Config {
   val io = IO(new WB_InterConnectIO)
-
   val dmem = Module(new DataMem)
   val imem = Module(new InstMem(initFile))
   val wbmaster = Module(new WB_Master)
+  val uart = Module(new UART)
 
+  // Inst/Data Memory interface for Processor Core
   wbmaster.io.dmemIO <> io.dmemIO
   imem.io.imemIO <> io.imemIO
   // connections between wbm and wbs_dmem
@@ -130,14 +134,34 @@ class WB_InterConnect(initFile: String)  extends Module with Config {
   imem.io.wbs.cyc_i := wbmaster.io.wbm.cyc_o
   imem.io.wbs.tgd_sttype_i := wbmaster.io.wbm.tgd_sttype_o
 
+  // Uart peripheral interface
+  uart.io.wbs.addr_i := wbmaster.io.wbm.addr_o
+  uart.io.wbs.data_i := wbmaster.io.wbm.data_o
+  uart.io.wbs.we_i := wbmaster.io.wbm.we_o
+  uart.io.wbs.sel_i := wbmaster.io.wbm.sel_o
+  uart.io.wbs.stb_i := wbmaster.io.wbm.stb_o
+  uart.io.wbs.cyc_i := wbmaster.io.wbm.cyc_o
+  uart.io.wbs.tgd_sttype_i := wbmaster.io.wbm.tgd_sttype_o
+
   // MT -- Data read Mux when reading data from one of the slaves
   val imem_sel = Reg(Bool())
   val dmem_sel = Reg(Bool())
+  val uart_sel = Reg(Bool())
   imem_sel := imem_addr && !imem.io.wbs.we_i && imem.io.wbs.stb_i
-  dmem_sel := dmem_addr && !dmem.io.wbs.we_i && dmem.io.wbs.stb_i
-  wbmaster.io.wbm.data_i := Mux(dmem_sel, dmem.io.wbs.data_o,
-                            Mux(imem_sel, imem.io.wbs.data_o, 0.U))
-  wbmaster.io.wbm.ack_i := Mux(dmem_sel, dmem.io.wbs.ack_o,
-                           Mux(imem_sel, imem.io.wbs.ack_o, 0.U))
+  dmem_sel := dmem_addr &&  dmem.io.wbs.stb_i   // MT  && !dmem.io.wbs.we_i
+  uart_sel := uart_addr &&  uart.io.wbs.stb_i   // MT  && !uart.io.wbs.we_i
 
+  wbmaster.io.wbm.data_i := Mux(dmem_sel, dmem.io.wbs.data_o,
+                                Mux((imem_sel && !dmem.io.wbs.we_i) , imem.io.wbs.data_o,
+                                    Mux((uart_sel && !uart.io.wbs.we_i), uart.io.wbs.data_o, 0.U)))
+  wbmaster.io.wbm.ack_i := Mux(dmem_sel, dmem.io.wbs.ack_o,
+                               Mux(imem_sel, imem.io.wbs.ack_o,
+                                   Mux(uart_sel, uart.io.wbs.ack_o,  0.U)))
+
+
+  // UART IO connectivity
+  uart.io.uart_select := uart_addr
+  uart.io.rxd := io.uartRx
+  io.uartTx := uart.io.txd
+  io.uartInt := uart.io.uartInt
 }
